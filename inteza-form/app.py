@@ -140,11 +140,15 @@ if app_mode == '表單填寫工具':
         st.sidebar.write('尚無資料')
 
 elif app_mode == '分析工具':
-    uploaded_file = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'])
+    uploaded_files = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'], accept_multiple_files=True)
 
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        st.success("✅ 資料上傳成功！")
+    if uploaded_files:
+        df_list = []
+        for uploaded_file in uploaded_files:
+            temp_df = pd.read_excel(uploaded_file)
+            df_list.append(temp_df)
+        df = pd.concat(df_list, ignore_index=True)
+        st.success(f"✅ 已整合 {len(uploaded_files)} 個檔案，共 {len(df)} 筆資料！")
 
         ng_data = df[df['Pass/NG'] == 'NG']
         score_data = df[df['項目'] == '整體評分'].copy()
