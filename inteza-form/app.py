@@ -17,7 +17,7 @@ EVALUATION_SECTIONS = {
 }
 
 st.set_page_config(layout='wide')
-st.markdown("<h1 style='text-align: center; color: #4CAF50;'>INTEZA 人因評估系統</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #4CAF50;'>INTENZA 人因評估系統</h1>", unsafe_allow_html=True)
 
 # 強力穩定版：每次刷新後自動回到頁面頂端
 st.markdown("""
