@@ -21,7 +21,6 @@ st.markdown("<h1 style='text-align: center; color: #4CAF50;'>INTEZA 人因評估
 
 app_mode = st.sidebar.selectbox('選擇功能', ['表單填寫工具', '分析工具'])
 
-# ===== 表單填寫工具 =====
 if app_mode == '表單填寫工具':
     if 'records' not in st.session_state:
         st.session_state.records = []
@@ -31,6 +30,18 @@ if app_mode == '表單填寫工具':
         st.session_state.tester_name = ''
     if 'selected_series' not in st.session_state:
         st.session_state.selected_series = None
+
+    MACHINE_CODES = []
+    current_machine = None
+    if st.session_state.selected_series:
+        MACHINE_CODES = ZL_MACHINES if st.session_state.selected_series == 'ZL 系列' else DL_MACHINES
+        if st.session_state.current_machine_index < len(MACHINE_CODES):
+            current_machine = MACHINE_CODES[st.session_state.current_machine_index]
+
+    # 顯示測試者姓名與目前機台在側邊欄最上方
+    st.sidebar.success(f"✅ 目前測試者姓名：{st.session_state.tester_name or '未輸入'}")
+    if current_machine:
+        st.sidebar.info(f"🚀 **目前驗證中機台：{current_machine}**")
 
     if st.session_state.tester_name == '':
         tester_input = st.text_input('請輸入測試者姓名')
@@ -42,7 +53,6 @@ if app_mode == '表單填寫工具':
                 st.warning('請先輸入姓名再提交')
         st.stop()
     else:
-        st.success(f"✅ 目前測試者姓名：{st.session_state.tester_name}")
         if st.button('🔄 重新輸入姓名'):
             st.session_state.tester_name = ''
             st.session_state.selected_series = None
@@ -57,37 +67,25 @@ if app_mode == '表單填寫工具':
             st.rerun()
         st.stop()
 
-    MACHINE_CODES = ZL_MACHINES if st.session_state.selected_series == 'ZL 系列' else DL_MACHINES
-    current_machine = MACHINE_CODES[st.session_state.current_machine_index] if st.session_state.current_machine_index < len(MACHINE_CODES) else None
-
-    st.sidebar.header('✅ 已完成機台')
     all_machines = ZL_MACHINES + DL_MACHINES
     completed_machines = sorted(set([r['機器代碼'] for r in st.session_state.records]), key=lambda x: all_machines.index(x))
 
+    st.sidebar.header('✅ 已完成機台')
     for m in completed_machines:
         if st.sidebar.button(f'{m} 修正'):
             st.session_state.records = [r for r in st.session_state.records if r['機器代碼'] != m]
-            if m.startswith('ZL'):
-                st.session_state.selected_series = 'ZL 系列'
-                st.session_state.current_machine_index = ZL_MACHINES.index(m)
-            else:
-                st.session_state.selected_series = 'DL 系列'
-                st.session_state.current_machine_index = DL_MACHINES.index(m)
+            st.session_state.selected_series = 'ZL 系列' if m.startswith('ZL') else 'DL 系列'
+            st.session_state.current_machine_index = ZL_MACHINES.index(m) if m.startswith('ZL') else DL_MACHINES.index(m)
             st.experimental_rerun()
         st.sidebar.write(m)
-    progress = len(completed_machines) / len(all_machines)
-    st.sidebar.progress(progress)
+    st.sidebar.progress(len(completed_machines) / len(all_machines))
 
     if current_machine is None:
         st.success(f'🎉 {st.session_state.selected_series} 填寫完成！請至側邊欄下載資料或選擇另一系列繼續填寫')
     else:
-        # ✅ 只在側邊欄顯示目前機台
-        st.sidebar.markdown(f"### 🚀 目前填寫中：**{current_machine}**")
-    
-        # ✅ 這裡補上 data_list 定義，避免 NameError
         data_list = []
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
+
         for section, items in EVALUATION_SECTIONS.items():
             st.subheader(f'🔹 {section}')
             section_notes = []
@@ -95,7 +93,7 @@ if app_mode == '表單填寫工具':
                 key_result = f'{section}_{item}_result'
                 if key_result not in st.session_state:
                     st.session_state[key_result] = None
-    
+
                 st.markdown(f"**{item}**")
                 col1, col2 = st.columns([0.48, 0.48])
                 with col1:
@@ -104,7 +102,7 @@ if app_mode == '表單填寫工具':
                 with col2:
                     if st.button('❌ NG', key=f'{section}_{item}_ng'):
                         st.session_state[key_result] = 'NG'
-    
+
                 current_selection = st.session_state[key_result]
                 if current_selection:
                     st.write(f"👉 已選擇：**{current_selection}**")
@@ -121,7 +119,7 @@ if app_mode == '表單填寫工具':
                     '分數': None,
                     '日期時間': date_str
                 })
-    
+
             combined_note = '; '.join(section_notes)
             summary_note = st.text_area(f'💬 {section} 區塊總結 Note（以下為細項 Note 整理供參考）\n{combined_note}', key=f'{section}_summary_note')
             data_list.append({
@@ -134,8 +132,8 @@ if app_mode == '表單填寫工具':
                 '分數': None,
                 '日期時間': date_str
             })
-    
-        score = st.slider('⭐ 整體評分（1~5分）', 1, 5, 3)
+
+        score = st.radio('⭐ 整體評分（1~5分）', [1, 2, 3, 4, 5], index=2)
         data_list.append({
             '測試者': st.session_state.tester_name,
             '機器代碼': current_machine,
@@ -146,7 +144,7 @@ if app_mode == '表單填寫工具':
             '分數': score,
             '日期時間': date_str
         })
-    
+
         if st.button('✅ 完成本機台並儲存，進入下一台'):
             st.session_state.records.extend(data_list)
             st.session_state.current_machine_index += 1
@@ -154,7 +152,6 @@ if app_mode == '表單填寫工具':
                 st.success(f'🎉 {st.session_state.selected_series} 填寫完成！請至側邊欄下載資料或選擇另一系列繼續填寫')
             else:
                 st.rerun()
-
 
     if st.session_state.records:
         df = pd.DataFrame(st.session_state.records)
@@ -187,15 +184,14 @@ if app_mode == '表單填寫工具':
     else:
         st.sidebar.write('尚無資料')
 
+# 分析工具區塊省略，如需我幫你整合完整分析工具，請直接說：「幫我整合分析工具區」！
+
 
 elif app_mode == '分析工具':
     uploaded_files = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'], accept_multiple_files=True)
 
     if uploaded_files:
-        df_list = []
-        for uploaded_file in uploaded_files:
-            temp_df = pd.read_excel(uploaded_file)
-            df_list.append(temp_df)
+        df_list = [pd.read_excel(file) for file in uploaded_files]
         df = pd.concat(df_list, ignore_index=True)
         st.success(f"✅ 已整合 {len(uploaded_files)} 個檔案，共 {len(df)} 筆資料！")
 
@@ -211,7 +207,7 @@ elif app_mode == '分析工具':
             machine_df = df[df['機器代碼'] == machine]
             for section in SECTION_ORDER:
                 sec_df = machine_df[machine_df['區塊'] == section]
-                if len(sec_df) == 0:
+                if sec_df.empty:
                     continue
                 pass_count = (sec_df['Pass/NG'] == 'Pass').sum()
                 ng_count = (sec_df['Pass/NG'] == 'NG').sum()
@@ -237,7 +233,6 @@ elif app_mode == '分析工具':
                 summary_df[machine] = None
 
         final_df = summary_df.pivot_table(index=['區塊', '項目'], values=MACHINE_CODES_ALL, aggfunc='first').reset_index()
-
         ng_sections = sorted([s for s in final_df['區塊'].unique() if s.startswith('NG：')])
         section_order_full = SECTION_ORDER + ng_sections
         final_df['區塊'] = pd.Categorical(final_df['區塊'], categories=section_order_full, ordered=True)
