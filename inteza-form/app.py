@@ -19,6 +19,15 @@ EVALUATION_SECTIONS = {
 st.set_page_config(layout='wide')
 st.markdown("<h1 style='text-align: center; color: #4CAF50;'>INTEZA 人因評估系統</h1>", unsafe_allow_html=True)
 
+# 強力穩定版：每次刷新後自動回到頁面頂端
+st.markdown("""
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            window.scrollTo(0, 0);
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 app_mode = st.sidebar.selectbox('選擇功能', ['表單填寫工具', '分析工具'])
 
 if app_mode == '表單填寫工具':
@@ -38,7 +47,6 @@ if app_mode == '表單填寫工具':
         if st.session_state.current_machine_index < len(MACHINE_CODES):
             current_machine = MACHINE_CODES[st.session_state.current_machine_index]
 
-    # 顯示測試者姓名與目前機台在側邊欄最上方
     st.sidebar.success(f"✅ 目前測試者姓名：{st.session_state.tester_name or '未輸入'}")
     if current_machine:
         st.sidebar.info(f"🚀 **目前驗證中機台：{current_machine}**")
@@ -147,11 +155,24 @@ if app_mode == '表單填寫工具':
 
         if st.button('✅ 完成本機台並儲存，進入下一台'):
             st.session_state.records.extend(data_list)
+
+            for section, items in EVALUATION_SECTIONS.items():
+                for item in items:
+                    key_result = f'{section}_{item}_result'
+                    key_note = f'{section}_{item}_note'
+                    if key_result in st.session_state:
+                        del st.session_state[key_result]
+                    if key_note in st.session_state:
+                        del st.session_state[key_note]
+                summary_key = f'{section}_summary_note'
+                if summary_key in st.session_state:
+                    del st.session_state[summary_key]
+
             st.session_state.current_machine_index += 1
-            if st.session_state.current_machine_index >= len(MACHINE_CODES):
-                st.success(f'🎉 {st.session_state.selected_series} 填寫完成！請至側邊欄下載資料或選擇另一系列繼續填寫')
-            else:
-                st.rerun()
+
+            # 顯示切換提示（增加畫面刷新感）
+            st.success("已儲存，正在切換到下一台...")
+            st.rerun()
 
     if st.session_state.records:
         df = pd.DataFrame(st.session_state.records)
@@ -183,8 +204,6 @@ if app_mode == '表單填寫工具':
             st.sidebar.download_button('📥 下載 DL 系列 Excel 檔案', create_excel(df_dl), file_name=f'評估結果_INTEZA_DL系列_{st.session_state.tester_name}_{datetime.now().strftime("%Y%m%d")}.xlsx')
     else:
         st.sidebar.write('尚無資料')
-
-# 分析工具區塊省略，如需我幫你整合完整分析工具，請直接說：「幫我整合分析工具區」！
 
 
 elif app_mode == '分析工具':
