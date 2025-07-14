@@ -3,3 +3,6 @@ pandas
 plotly
 xlsxwriter
 openpyxl
+gspread
+google-auth
+gspread-dataframe

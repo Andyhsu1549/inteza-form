@@ -2,7 +2,20 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
-import xlsxwriter
+import gspread
+from google.oauth2.service_account import Credentials
+from gspread_dataframe import set_with_dataframe
+
+# Google Sheet 設定
+SHEET_ID = '1IVwbN6BYAZKOsUy8XHVbrIGwzN_ptzsSZPUoVWKMcq0'
+SHEET_NAME = '工作表1'  # ⚠️ 改成你的 Google Sheet 左下角名稱
+
+# 初始化 Google Sheet 客戶端
+scope = ['https://www.googleapis.com/auth/spreadsheets']
+credentials = Credentials.from_service_account_info(st.secrets['gcp_service_account'], scopes=scope)
+gc = gspread.authorize(credentials)
+sh = gc.open_by_key(SHEET_ID)
+worksheet = sh.worksheet(SHEET_NAME)
 
 ZL_MACHINES = ['ZL-01', 'ZL-02', 'ZL-03', 'ZL-04', 'ZL-05', 'ZL-07', 'ZL-08', 'ZL-09', 'ZL-10', 'ZL-11']
 DL_MACHINES = ['DL-03', 'DL-04', 'DL-05', 'DL-10', 'DL-13']
@@ -29,35 +42,94 @@ EVALUATION_SECTIONS = {
 st.set_page_config(layout='wide')
 st.markdown("<h1 style='text-align: center; color: #4CAF50;'>INTENZA 人因評估系統</h1>", unsafe_allow_html=True)
 
-st.markdown("""
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            window.scrollTo(0, 0);
-        });
-    </script>
-""", unsafe_allow_html=True)
 app_mode = st.sidebar.selectbox('選擇功能', ['表單填寫工具', '分析工具'])
 
+# 初始化 session state
+if 'records' not in st.session_state:
+    st.session_state.records = []
+if 'current_machine_index' not in st.session_state:
+    st.session_state.current_machine_index = 0
+if 'tester_name' not in st.session_state:
+    st.session_state.tester_name = ''
+if 'selected_series' not in st.session_state:
+    st.session_state.selected_series = None
+
+MACHINE_CODES = []
+current_machine = None
+if st.session_state.selected_series:
+    MACHINE_CODES = ZL_MACHINES if st.session_state.selected_series == 'ZL 系列' else DL_MACHINES
+    if st.session_state.current_machine_index < len(MACHINE_CODES):
+        current_machine = MACHINE_CODES[st.session_state.current_machine_index]
+
+st.sidebar.success(f"✅ 目前測試者姓名：{st.session_state.tester_name or '未輸入'}")
+if current_machine:
+    st.sidebar.info(f"🚀 目前進行機台：{current_machine}")
+
+# 顯示系列完成度
+zl_completed = len([m for m in set([r['機器代碼'] for r in st.session_state.records]) if m in ZL_MACHINES])
+dl_completed = len([m for m in set([r['機器代碼'] for r in st.session_state.records]) if m in DL_MACHINES])
+
+st.sidebar.write(f"📊 ZL 系列完成度：{zl_completed} / {len(ZL_MACHINES)}")
+st.sidebar.write(f"📊 DL 系列完成度：{dl_completed} / {len(DL_MACHINES)}")
+
+# 下載 Google Sheet 今天資料
+try:
+    all_data = pd.DataFrame(worksheet.get_all_records())
+    all_data['日期時間'] = pd.to_datetime(all_data['日期時間'], errors='coerce')
+    today = pd.Timestamp.today().normalize()
+    tester_data = all_data[(all_data['測試者'] == st.session_state.tester_name) & (all_data['日期時間'] >= today)]
+
+    def create_today_excel(df_input):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_input.to_excel(writer, index=False, sheet_name='今天資料')
+            workbook = writer.book
+            worksheet_xl = writer.sheets['今天資料']
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#4CAF50', 'font_color': 'white', 'align': 'center'})
+            for col_num, value in enumerate(df_input.columns.values):
+                worksheet_xl.write(0, col_num, value, header_format)
+                worksheet_xl.set_column(col_num, col_num, 20)
+            worksheet_xl.freeze_panes(1, 0)
+        output.seek(0)
+        return output
+
+    st.sidebar.download_button(
+        '📥 下載今天資料 (Google Sheet)',
+        create_today_excel(tester_data),
+        file_name=f'今日資料_{st.session_state.tester_name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
+except Exception:
+    st.sidebar.write('Google Sheet 尚無資料或讀取失敗')
+
+# 下載 Session 資料
+if st.session_state.records:
+    df_session = pd.DataFrame(st.session_state.records)
+
+    def create_session_excel(df_input):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_input.to_excel(writer, index=False, sheet_name='Session資料')
+            workbook = writer.book
+            worksheet_xl = writer.sheets['Session資料']
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#4CAF50', 'font_color': 'white', 'align': 'center'})
+            for col_num, value in enumerate(df_input.columns.values):
+                worksheet_xl.write(0, col_num, value, header_format)
+                worksheet_xl.set_column(col_num, col_num, 20)
+            worksheet_xl.freeze_panes(1, 0)
+        output.seek(0)
+        return output
+
+    st.sidebar.download_button(
+        '💾 下載目前測試者資料 (Session)',
+        create_session_excel(df_session),
+        file_name=f'Session資料_{st.session_state.tester_name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
+else:
+    st.sidebar.write('目前沒有 Session 資料可下載')
+
 if app_mode == '表單填寫工具':
-    if 'records' not in st.session_state:
-        st.session_state.records = []
-    if 'current_machine_index' not in st.session_state:
-        st.session_state.current_machine_index = 0
-    if 'tester_name' not in st.session_state:
-        st.session_state.tester_name = ''
-    if 'selected_series' not in st.session_state:
-        st.session_state.selected_series = None
-
-    MACHINE_CODES = []
-    current_machine = None
-    if st.session_state.selected_series:
-        MACHINE_CODES = ZL_MACHINES if st.session_state.selected_series == 'ZL 系列' else DL_MACHINES
-        if st.session_state.current_machine_index < len(MACHINE_CODES):
-            current_machine = MACHINE_CODES[st.session_state.current_machine_index]
-
-    st.sidebar.success(f"✅ 目前測試者姓名：{st.session_state.tester_name or '未輸入'}")
-    if current_machine:
-        st.sidebar.info(f"🚀 **目前驗證中機台：{current_machine}**")
+    all_machines = ZL_MACHINES + DL_MACHINES
+    completed_machines = sorted(set([r['機器代碼'] for r in st.session_state.records]), key=lambda x: all_machines.index(x))
 
     if st.session_state.tester_name == '':
         tester_input = st.text_input('請輸入測試者姓名')
@@ -74,6 +146,7 @@ if app_mode == '表單填寫工具':
             st.session_state.selected_series = None
             st.session_state.current_machine_index = 0
             st.rerun()
+
     if st.session_state.selected_series is None:
         series_choice = st.radio('請選擇要開始的系列', ['ZL 系列', 'DL 系列'])
         if st.button('✅ 確認系列'):
@@ -82,34 +155,27 @@ if app_mode == '表單填寫工具':
             st.rerun()
         st.stop()
 
-    all_machines = ZL_MACHINES + DL_MACHINES
-    completed_machines = sorted(set([r['機器代碼'] for r in st.session_state.records]), key=lambda x: all_machines.index(x))
-
-    st.sidebar.header('✅ 已完成機台')
-    for m in completed_machines:
-        if st.sidebar.button(f'{m} 修正'):
-            st.session_state.records = [r for r in st.session_state.records if r['機器代碼'] != m]
-            st.session_state.selected_series = 'ZL 系列' if m.startswith('ZL') else 'DL 系列'
-            st.session_state.current_machine_index = ZL_MACHINES.index(m) if m.startswith('ZL') else DL_MACHINES.index(m)
-            st.experimental_rerun()
-        st.sidebar.write(m)
-    st.sidebar.progress(len(completed_machines) / len(all_machines))
-
     if current_machine is None:
         st.success(f'🎉 {st.session_state.selected_series} 填寫完成！請至側邊欄下載資料或選擇另一系列繼續填寫')
+        if st.sidebar.button('🔄 切換系列／重新開始'):
+            st.session_state.selected_series = None
+            st.session_state.current_machine_index = 0
+            st.rerun()
+
     else:
         data_list = []
         date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
         for section, items in EVALUATION_SECTIONS.items():
             st.subheader(f'🔹 {section}')
             section_notes = []
+
             for item in items:
                 key_result = f'{section}_{item}_result'
-                if key_result not in st.session_state:
-                    st.session_state[key_result] = None
 
+                # 這裡不再主動設定 st.session_state[key_result] = None
                 st.markdown(f"**{item}**")
-                col1, col2 = st.columns([0.48, 0.48])
+                col1, col2 = st.columns(2)
                 with col1:
                     if st.button('✅ Pass', key=f'{section}_{item}_pass'):
                         st.session_state[key_result] = 'Pass'
@@ -117,12 +183,14 @@ if app_mode == '表單填寫工具':
                     if st.button('❌ NG', key=f'{section}_{item}_ng'):
                         st.session_state[key_result] = 'NG'
 
-                current_selection = st.session_state[key_result]
+                current_selection = st.session_state.get(key_result)
                 if current_selection:
                     st.write(f"👉 已選擇：**{current_selection}**")
-                note = st.text_input(f'{item} Note', key=f'{section}_{item}_note')
+
+                note = st.text_input(f'{item} Note', key=f'{section}_{item}_note', value='')
                 if note.strip() != '':
                     section_notes.append(f'{item}: {note}')
+
                 data_list.append({
                     '測試者': st.session_state.tester_name,
                     '機器代碼': current_machine,
@@ -135,7 +203,11 @@ if app_mode == '表單填寫工具':
                 })
 
             combined_note = '; '.join(section_notes)
-            summary_note = st.text_area(f'💬 {section} 區塊總結 Note（以下為細項 Note 整理供參考）\n{combined_note}', key=f'{section}_summary_note')
+            summary_note = st.text_area(
+                f'💬 {section} 區塊總結 Note（以下為細項 Note 整理供參考）\n{combined_note}',
+                key=f'{section}_summary_note',
+                value=''
+            )
             data_list.append({
                 '測試者': st.session_state.tester_name,
                 '機器代碼': current_machine,
@@ -146,16 +218,16 @@ if app_mode == '表單填寫工具':
                 '分數': None,
                 '日期時間': date_str
             })
-        # Fibo 問題區塊（直接寫入主表 records，用 Pass/NG 標籤）
+
         if current_machine in FIBO_QUESTIONS:
             st.subheader('🔹 Fibo問題追蹤')
             for item in FIBO_QUESTIONS[current_machine]:
                 display_item = f'{item} （Fibo問題）'
                 key_result = f'Fibo_{item}_result'
-                if key_result not in st.session_state:
-                    st.session_state[key_result] = None
+
+                # 這裡同樣不主動設定 None
                 st.markdown(f"**{display_item}**")
-                col1, col2 = st.columns([0.48, 0.48])
+                col1, col2 = st.columns(2)
                 with col1:
                     if st.button('✅ Pass', key=f'Fibo_{item}_pass'):
                         st.session_state[key_result] = 'Pass'
@@ -163,10 +235,11 @@ if app_mode == '表單填寫工具':
                     if st.button('❌ NG', key=f'Fibo_{item}_ng'):
                         st.session_state[key_result] = 'NG'
 
-                current_selection = st.session_state[key_result]
+                current_selection = st.session_state.get(key_result)
                 if current_selection:
                     st.write(f"👉 已選擇：**{current_selection}**")
-                note = st.text_input(f'{display_item} Note', key=f'Fibo_{item}_note')
+
+                note = st.text_input(f'{display_item} Note', key=f'Fibo_{item}_note', value='')
                 data_list.append({
                     '測試者': st.session_state.tester_name,
                     '機器代碼': current_machine,
@@ -189,41 +262,31 @@ if app_mode == '表單填寫工具':
             '分數': score,
             '日期時間': date_str
         })
+
         if st.button('✅ 完成本機台並儲存，進入下一台'):
             st.session_state.records.extend(data_list)
+            df = pd.DataFrame(data_list)
+            existing_rows = len(worksheet.get_all_values())
+            set_with_dataframe(
+                worksheet,
+                df,
+                row=existing_rows + 1,
+                include_index=False,
+                include_column_header=False
+            )
+
+            # 強化版清理：只要 key 名含有 _result、_note、_summary_note 就刪掉
             for key in list(st.session_state.keys()):
-                if key.endswith('_result') or key.endswith('_note') or key.endswith('_summary_note'):
+                if '_result' in key or '_note' in key or '_summary_note' in key:
                     del st.session_state[key]
+
             st.session_state.current_machine_index += 1
-            st.success("已儲存，正在切換到下一台...")
+            st.success("已儲存到 Google Sheet，正在切換到下一台...")
             st.rerun()
 
-        if st.session_state.records:
-            df = pd.DataFrame(st.session_state.records)
-            with st.expander('🔍 預覽目前已填寫資料'):
-                st.dataframe(df)
 
-            def create_excel(df_input):
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df_input.to_excel(writer, index=False, sheet_name='評估結果')
-                    workbook = writer.book
-                    worksheet = writer.sheets['評估結果']
-                    header_format = workbook.add_format({'bold': True, 'bg_color': '#4CAF50', 'font_color': 'white', 'align': 'center'})
-                    for col_num, value in enumerate(df_input.columns.values):
-                        worksheet.write(0, col_num, value, header_format)
-                        worksheet.set_column(col_num, col_num, 20)
-                    worksheet.freeze_panes(1, 0)
-                output.seek(0)
-                return output
 
-            st.sidebar.download_button(
-                '📥 下載 全系列 Excel 檔案',
-                create_excel(df),
-                file_name=f'評估結果_INTEZA_全系列_{st.session_state.tester_name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
-            )
-        else:
-            st.sidebar.write('尚無資料')
+
 
 elif app_mode == '分析工具':
     uploaded_files = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'], accept_multiple_files=True)
