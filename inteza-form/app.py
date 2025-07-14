@@ -60,6 +60,12 @@ if st.session_state.selected_series:
     MACHINE_CODES = ZL_MACHINES if st.session_state.selected_series == 'ZL 系列' else DL_MACHINES
     if st.session_state.current_machine_index < len(MACHINE_CODES):
         current_machine = MACHINE_CODES[st.session_state.current_machine_index]
+        
+    # 👉 這段是我們新增的
+    selected_machine = st.sidebar.selectbox('📍 手動選擇要填寫的機器（可選）', ['<不選擇>'] + MACHINE_CODES)
+    if selected_machine != '<不選擇>':
+        current_machine = selected_machine
+
 
 st.sidebar.success(f"✅ 目前測試者姓名：{st.session_state.tester_name or '未輸入'}")
 if current_machine:
