@@ -414,7 +414,7 @@ elif app_mode == '分析工具':
         how='left'
     )
     
-    # ⚡ 型號_項目：項目｜機器代碼
+    # 這裡把順序反過來：項目｜機器代碼
     ng_notes['型號_項目'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
     
     # 合併備註
@@ -429,6 +429,9 @@ elif app_mode == '分析工具':
     # 按 NG 次數大到小、再備註長度大到小排序
     ng_agg = ng_agg.sort_values(['NG次數', '備註長度'], ascending=[False, False])
     
+    # 強制從最多到最少排序（最多的在最下方 → 反轉 list）
+    category_order = ng_agg['型號_項目'].tolist()[::-1]
+    
     # 畫圖
     fig_ng = px.bar(
         ng_agg,
@@ -441,17 +444,17 @@ elif app_mode == '分析工具':
         custom_data=['Note']
     )
     
-    # ⚡ hover 顯示備註，不顯示圖上文字
+    # hover 顯示備註（圖上不顯示文字）
     fig_ng.update_traces(
         hovertemplate='%{y}<br>NG次數: %{x}<br>備註: %{customdata[0]}',
         text=None
     )
     
-    # ⚡ Y 軸順序從最多到最少（最多在最下方）
+    # Y 軸排序、左側留空間
     fig_ng.update_layout(
         yaxis=dict(
             categoryorder='array',
-            categoryarray=ng_agg['型號_項目'].tolist()[::-1],  # 反轉順序
+            categoryarray=category_order,
             automargin=True
         ),
         margin=dict(l=300, r=20, t=50, b=50),
@@ -460,6 +463,7 @@ elif app_mode == '分析工具':
     
     # 顯示圖表
     st.plotly_chart(fig_ng)
+
 
 
     # 下載分析報告 Excel
