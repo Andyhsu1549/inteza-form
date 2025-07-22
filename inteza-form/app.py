@@ -429,8 +429,8 @@ elif app_mode == '分析工具':
     # 按 NG次數 大到小，再按 備註長度 大到小排序
     ng_agg = ng_agg.sort_values(['NG次數', '備註長度'], ascending=[False, False])
     
-    # 強制從最多到最少排序（最多的在最下方 → categoryarray 反轉）
-    category_order = ng_agg['項目_型號'].tolist()[::-1]
+    # ✅ 保留原順序，不反轉（最多的會在 plotly 的最下方）
+    category_order = ng_agg['項目_型號'].tolist()
     
     # 畫圖
     fig_ng = px.bar(
@@ -463,6 +463,7 @@ elif app_mode == '分析工具':
     
     # 顯示圖表
     st.plotly_chart(fig_ng)
+
 
 
 
