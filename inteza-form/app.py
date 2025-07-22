@@ -382,16 +382,31 @@ elif app_mode == '分析工具':
 
     # 總體評分排行榜（紅到綠）
     avg_scores = score_data.groupby('機器代碼')['整體評分'].mean().reset_index()
+    
     fig_score = px.bar(
         avg_scores,
         x='機器代碼',
         y='整體評分',
         title='⭐ 總體評分排行榜',
-        text='整體評分',
+        text='整體評分',  # 要顯示的數值
         color='整體評分',
         color_continuous_scale=['red', 'yellow', 'green']
     )
+    
+    # 文字放到柱狀圖上方 + 放大字體
+    fig_score.update_traces(
+        textposition='outside',
+        textfont_size=14
+    )
+    
+    # 如果項目多，可以適當調整寬度、間距
+    fig_score.update_layout(
+        height=500,
+        bargap=0.2
+    )
+    
     st.plotly_chart(fig_score)
+
 
 
     # NG 次數（含機器代碼，全數顯示）
