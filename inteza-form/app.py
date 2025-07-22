@@ -413,7 +413,9 @@ elif app_mode == '分析工具':
         on=['機器代碼', '項目'],
         how='left'
     )
-    ng_notes['型號_項目'] = ng_notes['機器代碼'] + '｜' + ng_notes['項目']
+    
+    # ⚡ 型號_項目：項目｜機器代碼
+    ng_notes['型號_項目'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
     
     # 合併備註
     ng_agg = ng_notes.groupby('型號_項目').agg({
@@ -433,23 +435,23 @@ elif app_mode == '分析工具':
         x='NG次數',
         y='型號_項目',
         orientation='h',
-        title='❌ 所有 NG 項目（含機器代碼，合併備註，按秩序排序）',
+        title='❌ 所有 NG 項目（項目｜機器代碼，合併備註，按秩序排序）',
         color='NG次數',
         color_continuous_scale='Reds',
         custom_data=['Note']
     )
     
-    # hover 顯示備註
+    # ⚡ hover 顯示備註，不顯示圖上文字
     fig_ng.update_traces(
         hovertemplate='%{y}<br>NG次數: %{x}<br>備註: %{customdata[0]}',
-        text=None  # 確保圖上沒有顯示多餘數值
+        text=None
     )
     
-    # Y 軸排序、左側留空間
+    # ⚡ Y 軸順序從最多到最少（最多在最下方）
     fig_ng.update_layout(
         yaxis=dict(
             categoryorder='array',
-            categoryarray=ng_agg['型號_項目'].tolist(),
+            categoryarray=ng_agg['型號_項目'].tolist()[::-1],  # 反轉順序
             automargin=True
         ),
         margin=dict(l=300, r=20, t=50, b=50),
@@ -458,7 +460,6 @@ elif app_mode == '分析工具':
     
     # 顯示圖表
     st.plotly_chart(fig_ng)
-
 
 
     # 下載分析報告 Excel
