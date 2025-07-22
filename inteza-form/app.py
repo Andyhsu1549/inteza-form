@@ -407,63 +407,59 @@ elif app_mode == '分析工具':
     
     st.plotly_chart(fig_score)
 
-
-
-    # NG 次數（含機器代碼與備註，全數顯示）
+    # 先準備 ng_notes（前面必須有）
     ng_notes = ng_summary.merge(
         df[['機器代碼', '項目', 'Note']].drop_duplicates(),
         on=['機器代碼', '項目'],
         how='left'
     )
+    ng_notes['型號_項目'] = ng_notes['機器代碼'] + '｜' + ng_notes['項目']
     
-    # 把順序改為 項目｜機器代碼
-    ng_notes['型號_項目'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
+    # 合併備註
+    ng_agg = ng_notes.groupby('型號_項目').agg({
+        'NG次數': 'sum',
+        'Note': lambda x: '; '.join(sorted(set(x.dropna().unique()))) if x.notna().any() else ''
+    }).reset_index()
     
-    # 建立 hover 顯示用文字
-    ng_notes['hovertext'] = ng_notes.apply(
-        lambda row: f"備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' else '無備註',
-        axis=1
-    )
+    # 計算備註長度（次要排序依據）
+    ng_agg['備註長度'] = ng_agg['Note'].apply(lambda x: len(x))
     
-    # 準備畫圖資料
-    top_ng = (
-        ng_notes.groupby(['型號_項目', 'hovertext'])['NG次數']
-        .sum()
-        .reset_index()
-        .sort_values('NG次數', ascending=False)
-    )
+    # 按 NG 次數大到小、再備註長度大到小排序
+    ng_agg = ng_agg.sort_values(['NG次數', '備註長度'], ascending=[False, False])
     
     # 畫圖
     fig_ng = px.bar(
-        top_ng,
+        ng_agg,
         x='NG次數',
         y='型號_項目',
         orientation='h',
-        title='❌ 所有 NG 項目（含項目｜機器代碼，hover 顯示備註）',
-        text='NG次數',
+        title='❌ 所有 NG 項目（含機器代碼，合併備註，按秩序排序）',
         color='NG次數',
         color_continuous_scale='Reds',
-        hover_name='hovertext'
+        custom_data=['Note']
     )
     
-    # 調整圖表細節
+    # hover 顯示備註
     fig_ng.update_traces(
-        textposition='outside',
-        textfont_size=14,
-        marker_line_width=0.5
+        hovertemplate='%{y}<br>NG次數: %{x}<br>備註: %{customdata[0]}',
+        text=None  # 確保圖上沒有顯示多餘數值
     )
     
+    # Y 軸排序、左側留空間
     fig_ng.update_layout(
-        height=600,
-        margin=dict(l=350, r=20, t=50, b=50),  # 左側多留空間避免擠壓
         yaxis=dict(
-            automargin=True,
-            tickfont=dict(family="Courier New, monospace", size=12)  # 用等寬字體讓對齊更好看
-        )
+            categoryorder='array',
+            categoryarray=ng_agg['型號_項目'].tolist(),
+            automargin=True
+        ),
+        margin=dict(l=300, r=20, t=50, b=50),
+        height=600
     )
     
-    # 顯示在 Streamlit
+    # 顯示圖表
     st.plotly_chart(fig_ng)
+
+
 
     # 下載分析報告 Excel
     def create_analysis_excel(df_input):
