@@ -397,6 +397,7 @@ elif app_mode == '分析工具':
     # NG 次數（含機器代碼，全數顯示）
     ng_summary['型號_項目'] = ng_summary['機器代碼'] + '｜' + ng_summary['項目']
     top_ng = ng_summary.groupby('型號_項目')['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
+    
     fig_ng = px.bar(
         top_ng,
         x='NG次數',
@@ -408,14 +409,23 @@ elif app_mode == '分析工具':
         color_continuous_scale='Reds'
     )
     
-    # 強制顯示數值在條外
-    fig_ng.update_traces(textposition='outside')
+    # ✅ 強制文字顯示在條外，字體變大
+    fig_ng.update_traces(
+        textposition='outside',
+        textfont_size=14,    # 字體大小（你可以改 16、18 看效果）
+        marker_line_width=0.5  # 條邊框細線（讓條更分明）
+    )
     
-    # 如果項目很多，把圖高拉大
-    fig_ng.update_layout(height=600)
+    # ✅ 圖高調整 + 條寬調整（bar thickness）
+    fig_ng.update_layout(
+        height=500,           # 整體畫布高度（減少過高）
+        bargap=0.2,           # 條與條之間的間距（0~1，數值越大越疏）
+        yaxis={'categoryorder': 'total ascending'}  # 小條在上，大條在下（可選）
+    )
     
-    # 顯示在 Streamlit
+    # ✅ 顯示在 Streamlit
     st.plotly_chart(fig_ng)
+
 
 
     # 下載分析報告 Excel
