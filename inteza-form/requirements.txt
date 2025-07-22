@@ -7,3 +7,5 @@ plotly
 wordcloud
 matplotlib
 xlsxwriter
+seaborn
+wordcloud

@@ -296,17 +296,24 @@ if app_mode == '表單填寫工具':
 
 elif app_mode == '分析工具':
     try:
-        all_data = pd.DataFrame(worksheet.get_all_records())
-        if all_data.empty:
+        raw_values = worksheet.get_all_values()
+        if not raw_values:
             st.warning("⚠️ Google Sheet 尚無資料可分析。")
             st.stop()
+        header = raw_values[0]
+        if '' in header:
+            header = [col if col != '' else f'Unnamed_{i}' for i, col in enumerate(header)]
+        if len(header) != len(set(header)):
+            st.error(f"❌ Google Sheet header 有重複值：{header}")
+            st.stop()
+        all_data = pd.DataFrame(raw_values[1:], columns=header)
     except Exception as e:
         st.error(f"❌ Google Sheet 讀取失敗：{e}")
         st.stop()
 
-    df = all_data.copy()
-    st.success(f"✅ 從 Google Sheet 讀取 {len(df)} 筆資料！")
+    st.success(f"✅ 從 Google Sheet 讀取 {len(all_data)} 筆資料！")
 
+    df = all_data.copy()
     ng_data = df[df['Pass/NG'] == 'NG']
     score_data = df[df['項目'] == '整體評分'].copy()
     score_data['整體評分'] = pd.to_numeric(score_data['分數'], errors='coerce')
@@ -367,9 +374,65 @@ elif app_mode == '分析工具':
     final_df['區塊'] = pd.Categorical(final_df['區塊'], categories=section_order_full, ordered=True)
     final_df = final_df.sort_values(['區塊', '項目']).reset_index(drop=True)
 
+    # ========== 視覺化部分 ==========
     st.markdown("### 📊 分析結果預覽")
     st.dataframe(final_df)
 
+    # 總體評分排行榜
+    avg_scores = score_data.groupby('機器代碼')['整體評分'].mean().reset_index()
+    fig_score = px.bar(
+        avg_scores,
+        x='機器代碼',
+        y='整體評分',
+        title='⭐ 總體評分排行榜',
+        text='整體評分',
+        color='整體評分',
+        color_continuous_scale='Viridis'
+    )
+    st.plotly_chart(fig_score)
+
+    # NG 次數 Top10
+    top_ng = ng_summary.groupby('項目')['NG次數'].sum().nlargest(10).reset_index()
+    fig_ng = px.bar(
+        top_ng,
+        x='NG次數',
+        y='項目',
+        orientation='h',
+        title='❌ NG 次數 Top 10 項目',
+        text='NG次數',
+        color='NG次數',
+        color_continuous_scale='Reds'
+    )
+    st.plotly_chart(fig_ng)
+
+    # 字雲（總結 Note）
+    all_notes = ' '.join(df[(df['項目'] == '區塊總結 Note') & (df['Note'] != '')]['Note'].tolist())
+    if all_notes.strip():
+        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_notes)
+        fig_wc, ax = plt.subplots(figsize=(10, 5))
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        st.pyplot(fig_wc)
+    else:
+        st.info('❕ 沒有可用的總結 Note 來生成字雲。')
+
+    # 通過率熱圖
+    passrate_df = final_df[final_df['項目'] == '通過率 (%)'].set_index('區塊')[MACHINE_CODES_ALL]
+    passrate_df_clean = passrate_df.applymap(lambda x: float(x.replace('%', '')) if isinstance(x, str) and '%' in x else None)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.heatmap(
+        passrate_df_clean,
+        annot=True,
+        fmt=".1f",
+        cmap="YlGnBu",
+        cbar_kws={'label': '通過率 (%)'},
+        ax=ax
+    )
+    ax.set_title('🔥 通過率熱圖')
+    st.pyplot(fig)
+
+    # 下載分析報告 Excel
     def create_analysis_excel(df_input):
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
