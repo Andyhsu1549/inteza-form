@@ -6,4 +6,4 @@ gspread-dataframe
 plotly
 wordcloud
 matplotlib
-openpyxl
+xlsxwriter

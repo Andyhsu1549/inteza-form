@@ -1,21 +1,21 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from io import BytesIO
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread_dataframe import set_with_dataframe
+from datetime import datetime
+from io import BytesIO
 import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
-# Google Sheet 設定
+# ===== 基本設定 =====
 SHEET_ID = '1IVwbN6BYAZKOsUy8XHVbrIGwzN_ptzsSZPUoVWKMcq0'
 SHEET_NAME = '工作表1'
 ANALYSIS_SHEET_NAME = '分析報告'
-
-# 初始化 Google Sheet 客戶端
 scope = ['https://www.googleapis.com/auth/spreadsheets']
+
+# ===== 初始化 Google Sheet 客戶端 =====
 credentials = Credentials.from_service_account_info(st.secrets['gcp_service_account'], scopes=scope)
 gc = gspread.authorize(credentials)
 sh = gc.open_by_key(SHEET_ID)
@@ -294,134 +294,101 @@ if app_mode == '表單填寫工具':
             st.success("已儲存到 Google Sheet，正在切換到下一台...")
             st.rerun()
 
-if app_mode == '分析工具':
-    uploaded_files = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'], accept_multiple_files=True)
+elif app_mode == '分析工具':
+    try:
+        all_data = pd.DataFrame(worksheet.get_all_records())
+        if all_data.empty:
+            st.warning("⚠️ Google Sheet 尚無資料可分析。")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Google Sheet 讀取失敗：{e}")
+        st.stop()
 
-    if uploaded_files:
-        df_list = [pd.read_excel(file) for file in uploaded_files]
-        df = pd.concat(df_list, ignore_index=True)
-        st.success(f"✅ 已整合 {len(uploaded_files)} 個檔案，共 {len(df)} 筆資料！")
+    df = all_data.copy()
+    st.success(f"✅ 從 Google Sheet 讀取 {len(df)} 筆資料！")
 
-        ng_data = df[df['Pass/NG'] == 'NG']
-        score_data = df[df['項目'] == '整體評分'].copy()
-        score_data['整體評分'] = pd.to_numeric(score_data['分數'], errors='coerce')
+    ng_data = df[df['Pass/NG'] == 'NG']
+    score_data = df[df['項目'] == '整體評分'].copy()
+    score_data['整體評分'] = pd.to_numeric(score_data['分數'], errors='coerce')
 
-        summary_list = []
-        SECTION_ORDER = list(EVALUATION_SECTIONS.keys()) + ['Fibo問題追蹤', '整體評估']
-        MACHINE_CODES_ALL = ZL_MACHINES + DL_MACHINES
-        for machine in MACHINE_CODES_ALL:
-            machine_df = df[df['機器代碼'] == machine]
-            for section in SECTION_ORDER:
-                sec_df = machine_df[machine_df['區塊'] == section]
-                if sec_df.empty:
-                    continue
-                pass_count = (sec_df['Pass/NG'] == 'Pass').sum()
-                ng_count = (sec_df['Pass/NG'] == 'NG').sum()
-                total = pass_count + ng_count
-                pass_rate = (pass_count / total * 100) if total > 0 else None
-                notes = sec_df[(sec_df['項目'] == '區塊總結 Note') & (sec_df['Note'] != '')]
-                combined_notes = '; '.join([f"{n}（{t}）" for n, t in zip(notes['Note'], notes['測試者'])])
+    summary_list = []
+    SECTION_ORDER = list(EVALUATION_SECTIONS.keys()) + ['Fibo問題追蹤', '整體評估']
+    MACHINE_CODES_ALL = ZL_MACHINES + DL_MACHINES
 
-                summary_list.append({
-                    '區塊': section,
-                    '項目': '通過率 (%)',
-                    machine: f"{pass_rate:.1f}%" if pass_rate is not None else 'N/A'
-                })
-                summary_list.append({
-                    '區塊': section,
-                    '項目': '區塊總結 Note',
-                    machine: combined_notes if combined_notes else '無'
-                })
+    for machine in MACHINE_CODES_ALL:
+        machine_df = df[df['機器代碼'] == machine]
+        for section in SECTION_ORDER:
+            sec_df = machine_df[machine_df['區塊'] == section]
+            if sec_df.empty:
+                continue
+            pass_count = (sec_df['Pass/NG'] == 'Pass').sum()
+            ng_count = (sec_df['Pass/NG'] == 'NG').sum()
+            total = pass_count + ng_count
+            pass_rate = (pass_count / total * 100) if total > 0 else None
+            notes = sec_df[(sec_df['項目'] == '區塊總結 Note') & (sec_df['Note'] != '')]
+            combined_notes = '; '.join([f"{n}（{t}）" for n, t in zip(notes['Note'], notes['測試者'])])
 
-            avg_score = score_data[score_data['機器代碼'] == machine]['整體評分'].mean()
             summary_list.append({
-                '區塊': '整體評估',
-                '項目': '總體評分',
-                machine: f"{avg_score:.1f}" if not pd.isna(avg_score) else 'N/A'
+                '區塊': section,
+                '項目': '通過率 (%)',
+                machine: f"{pass_rate:.1f}%" if pass_rate is not None else 'N/A'
             })
-        ng_summary = ng_data.groupby(['機器代碼', '區塊', '項目']).size().reset_index(name='NG次數')
-        for machine in MACHINE_CODES_ALL:
-            machine_ng = ng_summary[ng_summary['機器代碼'] == machine].sort_values('NG次數', ascending=False)
-            for _, row in machine_ng.iterrows():
-                summary_list.append({
-                    '區塊': f"NG：{row['區塊']}",
-                    '項目': row['項目'],
-                    machine: f"{row['NG次數']} 次"
-                })
+            summary_list.append({
+                '區塊': section,
+                '項目': '區塊總結 Note',
+                machine: combined_notes if combined_notes else '無'
+            })
 
-        summary_df = pd.DataFrame(summary_list)
-        for machine in MACHINE_CODES_ALL:
-            if machine not in summary_df.columns:
-                summary_df[machine] = None
+        avg_score = score_data[score_data['機器代碼'] == machine]['整體評分'].mean()
+        summary_list.append({
+            '區塊': '整體評估',
+            '項目': '總體評分',
+            machine: f"{avg_score:.1f}" if not pd.isna(avg_score) else 'N/A'
+        })
 
-        final_df = summary_df.pivot_table(index=['區塊', '項目'], values=MACHINE_CODES_ALL, aggfunc='first').reset_index()
-        ng_sections = sorted([s for s in final_df['區塊'].unique() if s.startswith('NG：')])
-        section_order_full = SECTION_ORDER + ng_sections
-        final_df['區塊'] = pd.Categorical(final_df['區塊'], categories=section_order_full, ordered=True)
-        final_df = final_df.sort_values(['區塊', '項目']).reset_index(drop=True)
+    ng_summary = ng_data.groupby(['機器代碼', '區塊', '項目']).size().reset_index(name='NG次數')
+    for machine in MACHINE_CODES_ALL:
+        machine_ng = ng_summary[ng_summary['機器代碼'] == machine].sort_values('NG次數', ascending=False)
+        for _, row in machine_ng.iterrows():
+            summary_list.append({
+                '區塊': f"NG：{row['區塊']}",
+                '項目': row['項目'],
+                machine: f"{row['NG次數']} 次"
+            })
 
-        st.markdown("### 📊 分析結果預覽")
-        st.dataframe(final_df)
+    summary_df = pd.DataFrame(summary_list)
+    for machine in MACHINE_CODES_ALL:
+        if machine not in summary_df.columns:
+            summary_df[machine] = None
 
-        # 寫入 Google Sheet 分析報告分頁
-        try:
-            analysis_worksheet = sh.worksheet(ANALYSIS_SHEET_NAME)
-        except gspread.exceptions.WorksheetNotFound:
-            analysis_worksheet = sh.add_worksheet(title=ANALYSIS_SHEET_NAME, rows=1000, cols=20)
-        analysis_worksheet.clear()
-        set_with_dataframe(
-            analysis_worksheet,
-            final_df,
-            include_index=False,
-            include_column_header=True
-        )
-        st.success("✅ 分析報告已自動寫入 Google Sheet 分頁 '分析報告'")
+    final_df = summary_df.pivot_table(index=['區塊', '項目'], values=MACHINE_CODES_ALL, aggfunc='first').reset_index()
+    ng_sections = sorted([s for s in final_df['區塊'].unique() if s.startswith('NG：')])
+    section_order_full = SECTION_ORDER + ng_sections
+    final_df['區塊'] = pd.Categorical(final_df['區塊'], categories=section_order_full, ordered=True)
+    final_df = final_df.sort_values(['區塊', '項目']).reset_index(drop=True)
 
-        # 高階視覺化部分
-        st.markdown("### 🔥 高階視覺化")
+    st.markdown("### 📊 分析結果預覽")
+    st.dataframe(final_df)
 
-        # 1️⃣ 總體評分排行榜
-        avg_scores = score_data.groupby('機器代碼')['整體評分'].mean().reset_index()
-        fig = px.bar(avg_scores, x='機器代碼', y='整體評分', title='總體評分排行榜')
-        st.plotly_chart(fig)
+    def create_analysis_excel(df_input):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_input.to_excel(writer, index=False, sheet_name='分析報告')
+            workbook = writer.book
+            worksheet = writer.sheets['分析報告']
+            header_format = workbook.add_format({
+                'bold': True, 'bg_color': '#4CAF50',
+                'font_color': 'white', 'align': 'center'
+            })
+            for col_num, value in enumerate(df_input.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+                worksheet.set_column(col_num, col_num, 20)
+            worksheet.freeze_panes(1, 0)
+        output.seek(0)
+        return output
 
-        # 2️⃣ NG 次數前10排行
-        top_ng = ng_summary.groupby('項目')['NG次數'].sum().nlargest(10).reset_index()
-        fig_ng = px.bar(top_ng, x='NG次數', y='項目', orientation='h', title='NG 次數 Top 10', text='NG次數')
-        st.plotly_chart(fig_ng)
-
-        # 3️⃣ 區塊總結 Note 字雲
-        all_notes = ' '.join(df[(df['項目'] == '區塊總結 Note') & (df['Note'] != '')]['Note'].tolist())
-        if all_notes.strip():
-            wordcloud = WordCloud(width=800, height=400, background_color='white', font_path=None).generate(all_notes)
-            fig_wc, ax = plt.subplots(figsize=(10, 5))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis('off')
-            st.pyplot(fig_wc)
-        else:
-            st.info('❕ 沒有可用的總結 Note 來生成字雲。')
-
-        def create_analysis_excel(df_input):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_input.to_excel(writer, index=False, sheet_name='分析報告')
-                workbook = writer.book
-                worksheet = writer.sheets['分析報告']
-                header_format = workbook.add_format({
-                    'bold': True, 'bg_color': '#4CAF50',
-                    'font_color': 'white', 'align': 'center'
-                })
-                for col_num, value in enumerate(df_input.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                    worksheet.set_column(col_num, col_num, 20)
-                worksheet.freeze_panes(1, 0)
-            output.seek(0)
-            return output
-
-        st.sidebar.download_button(
-            '📥 下載分析報告 Excel',
-            create_analysis_excel(final_df),
-            file_name=f'分析報告_INTEZA_{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
-        )
-    else:
-        st.info("請在側邊欄上傳資料檔案以開始分析。")
+    st.sidebar.download_button(
+        '📥 下載分析報告 Excel',
+        create_analysis_excel(final_df),
+        file_name=f'分析報告_INTEZA_{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+    )
