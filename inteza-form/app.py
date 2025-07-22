@@ -380,7 +380,7 @@ elif app_mode == '分析工具':
     st.markdown("### 📊 分析結果預覽")
     st.dataframe(final_df)
 
-    # 總體評分排行榜
+    # 總體評分排行榜（紅到綠）
     avg_scores = score_data.groupby('機器代碼')['整體評分'].mean().reset_index()
     fig_score = px.bar(
         avg_scores,
@@ -389,9 +389,10 @@ elif app_mode == '分析工具':
         title='⭐ 總體評分排行榜',
         text='整體評分',
         color='整體評分',
-        color_continuous_scale='Viridis'
+        color_continuous_scale=['red', 'yellow', 'green']
     )
     st.plotly_chart(fig_score)
+
 
     # NG 次數（含機器代碼，全數顯示）
     ng_summary['型號_項目'] = ng_summary['機器代碼'] + '｜' + ng_summary['項目']
@@ -406,8 +407,15 @@ elif app_mode == '分析工具':
         color='NG次數',
         color_continuous_scale='Reds'
     )
+    
+    # 強制顯示數值在條外
+    fig_ng.update_traces(textposition='outside')
+    
+    # 如果項目很多，把圖高拉大
+    fig_ng.update_layout(height=600)
+    
+    # 顯示在 Streamlit
     st.plotly_chart(fig_ng)
-
 
 
     # 下載分析報告 Excel
