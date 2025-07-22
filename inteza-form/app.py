@@ -393,19 +393,21 @@ elif app_mode == '分析工具':
     )
     st.plotly_chart(fig_score)
 
-    # NG 次數 Top10
-    top_ng = ng_summary.groupby('項目')['NG次數'].sum().nlargest(10).reset_index()
+    # NG 次數 Top10（含機器代碼）
+    ng_summary['型號_項目'] = ng_summary['機器代碼'] + '｜' + ng_summary['項目']
+    top_ng = ng_summary.groupby('型號_項目')['NG次數'].sum().nlargest(10).reset_index()
     fig_ng = px.bar(
         top_ng,
         x='NG次數',
-        y='項目',
+        y='型號_項目',
         orientation='h',
-        title='❌ NG 次數 Top 10 項目',
+        title='❌ NG 次數 Top 10（含機器代碼）',
         text='NG次數',
         color='NG次數',
         color_continuous_scale='Reds'
     )
     st.plotly_chart(fig_ng)
+
 
     # 下載分析報告 Excel
     def create_analysis_excel(df_input):
