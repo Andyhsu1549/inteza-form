@@ -8,6 +8,8 @@ from io import BytesIO
 import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 # ===== 基本設定 =====
 SHEET_ID = '1IVwbN6BYAZKOsUy8XHVbrIGwzN_ptzsSZPUoVWKMcq0'
