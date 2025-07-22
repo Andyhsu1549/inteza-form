@@ -407,36 +407,36 @@ elif app_mode == '分析工具':
     
     st.plotly_chart(fig_score)
 
-    # 先準備 ng_notes（前面必須有）
+    # 準備 ng_notes（保證前面有 ng_summary 和 df）
     ng_notes = ng_summary.merge(
         df[['機器代碼', '項目', 'Note']].drop_duplicates(),
         on=['機器代碼', '項目'],
         how='left'
     )
     
-    # 這裡把順序反過來：項目｜機器代碼
-    ng_notes['型號_項目'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
+    # 把順序改為：項目｜機器代碼
+    ng_notes['項目_型號'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
     
     # 合併備註
-    ng_agg = ng_notes.groupby('型號_項目').agg({
+    ng_agg = ng_notes.groupby('項目_型號').agg({
         'NG次數': 'sum',
         'Note': lambda x: '; '.join(sorted(set(x.dropna().unique()))) if x.notna().any() else ''
     }).reset_index()
     
-    # 計算備註長度（次要排序依據）
+    # 計算備註長度（作為次要排序依據）
     ng_agg['備註長度'] = ng_agg['Note'].apply(lambda x: len(x))
     
-    # 按 NG 次數大到小、再備註長度大到小排序
+    # 按 NG次數 大到小，再按 備註長度 大到小排序
     ng_agg = ng_agg.sort_values(['NG次數', '備註長度'], ascending=[False, False])
     
-    # 強制從最多到最少排序（最多的在最下方 → 反轉 list）
-    category_order = ng_agg['型號_項目'].tolist()[::-1]
+    # 強制從最多到最少排序（最多的在最下方 → categoryarray 反轉）
+    category_order = ng_agg['項目_型號'].tolist()[::-1]
     
     # 畫圖
     fig_ng = px.bar(
         ng_agg,
         x='NG次數',
-        y='型號_項目',
+        y='項目_型號',
         orientation='h',
         title='❌ 所有 NG 項目（項目｜機器代碼，合併備註，按秩序排序）',
         color='NG次數',
@@ -444,13 +444,13 @@ elif app_mode == '分析工具':
         custom_data=['Note']
     )
     
-    # hover 顯示備註（圖上不顯示文字）
+    # 設定 hover 內容（圖上不顯示數值）
     fig_ng.update_traces(
         hovertemplate='%{y}<br>NG次數: %{x}<br>備註: %{customdata[0]}',
         text=None
     )
     
-    # Y 軸排序、左側留空間
+    # 設定 y 軸順序、左側留空間
     fig_ng.update_layout(
         yaxis=dict(
             categoryorder='array',
@@ -463,6 +463,7 @@ elif app_mode == '分析工具':
     
     # 顯示圖表
     st.plotly_chart(fig_ng)
+
 
 
 
