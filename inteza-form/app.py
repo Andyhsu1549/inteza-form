@@ -446,12 +446,14 @@ elif app_mode == '分析工具':
     
     fig_ng.update_layout(
     height=600,
-    margin=dict(l=300, r=20, t=50, b=50),  # 左側拉寬，避免擠壓
+    margin=dict(l=300, r=20, t=50, b=50),  # 左側多留空間
     yaxis=dict(
         automargin=True,
-        tickfont=dict(family="Courier New, monospace", size=12)  # 固定字距看起來更整齊
+        tickfont=dict(family="Courier New, monospace", size=12),  # 用等寬字體
+        side='left'  # 確保在左側（預設值）
     )
 )
+
 
     
     st.plotly_chart(fig_ng)
