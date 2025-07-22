@@ -88,15 +88,13 @@ st.sidebar.write(f"📊 DL 系列完成度：{dl_completed} / {len(DL_MACHINES)}
 try:
     all_data = pd.DataFrame(worksheet.get_all_records())
     all_data['日期時間'] = pd.to_datetime(all_data['日期時間'], errors='coerce')
-    today = pd.Timestamp.today().normalize()
-    tester_data = all_data[(all_data['測試者'] == st.session_state.tester_name) & (all_data['日期時間'] >= today)]
 
-    def create_today_excel(df_input):
+    def create_all_data_excel(df_input):
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_input.to_excel(writer, index=False, sheet_name='今天資料')
+            df_input.to_excel(writer, index=False, sheet_name='全部資料')
             workbook = writer.book
-            worksheet_xl = writer.sheets['今天資料']
+            worksheet_xl = writer.sheets['全部資料']
             header_format = workbook.add_format({'bold': True, 'bg_color': '#4CAF50', 'font_color': 'white', 'align': 'center'})
             for col_num, value in enumerate(df_input.columns.values):
                 worksheet_xl.write(0, col_num, value, header_format)
@@ -106,12 +104,13 @@ try:
         return output
 
     st.sidebar.download_button(
-        '📥 下載今天資料 (Google Sheet)',
-        create_today_excel(tester_data),
-        file_name=f'今日資料_{st.session_state.tester_name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        '📥 下載全部資料 (Google Sheet)',
+        create_all_data_excel(all_data),
+        file_name=f'全部資料_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
 except Exception:
     st.sidebar.write('Google Sheet 尚無資料或讀取失敗')
+
 
 # 下載 Session 資料
 if st.session_state.records:
