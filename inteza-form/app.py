@@ -416,23 +416,26 @@ elif app_mode == '分析工具':
         how='left'
     )
     
-    ng_notes['型號_項目_備註'] = ng_notes.apply(
-        lambda row: f"{row['機器代碼']}｜{row['項目']}\n備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' 
-        else f"{row['機器代碼']}｜{row['項目']}",
+    # 準備資料
+    ng_notes['型號_項目'] = ng_notes['機器代碼'] + '｜' + ng_notes['項目']
+    ng_notes['hovertext'] = ng_notes.apply(
+        lambda row: f"備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' else '',
         axis=1
     )
     
-    top_ng = ng_notes.groupby('型號_項目_備註')['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
+    top_ng = ng_notes.groupby(['型號_項目', 'hovertext'])['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
     
+    # 畫圖
     fig_ng = px.bar(
         top_ng,
         x='NG次數',
-        y='型號_項目_備註',
+        y='型號_項目',
         orientation='h',
-        title='❌ 所有 NG 項目（含機器代碼與備註，依次數排序）',
+        title='❌ 所有 NG 項目（含機器代碼，備註在 hover）',
         text='NG次數',
         color='NG次數',
-        color_continuous_scale='Reds'
+        color_continuous_scale='Reds',
+        hover_name='hovertext'
     )
     
     fig_ng.update_traces(
@@ -444,15 +447,14 @@ elif app_mode == '分析工具':
     fig_ng.update_layout(
         height=600,
         yaxis=dict(
-            automargin=True,              # 自動邊距，避免長文字被裁切
-            tickfont=dict(size=12),       # y 軸字體大小
-            ticklabelposition='inside'    # 位置稍往內（靠左感更強）
+            automargin=True,
+            tickfont=dict(size=12)
         ),
-        bargap=0.2,
-        margin=dict(l=200, r=20, t=50, b=50)  # 左邊拉寬（讓長文字有空間）
+        margin=dict(l=200, r=20, t=50, b=50)
     )
     
     st.plotly_chart(fig_ng)
+
 
 
 
