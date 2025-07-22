@@ -5,10 +5,14 @@ from io import BytesIO
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread_dataframe import set_with_dataframe
+import plotly.express as px
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 # Google Sheet 設定
 SHEET_ID = '1IVwbN6BYAZKOsUy8XHVbrIGwzN_ptzsSZPUoVWKMcq0'
-SHEET_NAME = '工作表1'  # ⚠️ 改成你的 Google Sheet 左下角名稱
+SHEET_NAME = '工作表1'
+ANALYSIS_SHEET_NAME = '分析報告'
 
 # 初始化 Google Sheet 客戶端
 scope = ['https://www.googleapis.com/auth/spreadsheets']
@@ -290,11 +294,7 @@ if app_mode == '表單填寫工具':
             st.success("已儲存到 Google Sheet，正在切換到下一台...")
             st.rerun()
 
-
-
-
-
-elif app_mode == '分析工具':
+if app_mode == '分析工具':
     uploaded_files = st.sidebar.file_uploader("📂 上傳整合資料檔（Excel）", type=['xlsx'], accept_multiple_files=True)
 
     if uploaded_files:
@@ -359,8 +359,47 @@ elif app_mode == '分析工具':
         section_order_full = SECTION_ORDER + ng_sections
         final_df['區塊'] = pd.Categorical(final_df['區塊'], categories=section_order_full, ordered=True)
         final_df = final_df.sort_values(['區塊', '項目']).reset_index(drop=True)
+
         st.markdown("### 📊 分析結果預覽")
         st.dataframe(final_df)
+
+        # 寫入 Google Sheet 分析報告分頁
+        try:
+            analysis_worksheet = sh.worksheet(ANALYSIS_SHEET_NAME)
+        except gspread.exceptions.WorksheetNotFound:
+            analysis_worksheet = sh.add_worksheet(title=ANALYSIS_SHEET_NAME, rows=1000, cols=20)
+        analysis_worksheet.clear()
+        set_with_dataframe(
+            analysis_worksheet,
+            final_df,
+            include_index=False,
+            include_column_header=True
+        )
+        st.success("✅ 分析報告已自動寫入 Google Sheet 分頁 '分析報告'")
+
+        # 高階視覺化部分
+        st.markdown("### 🔥 高階視覺化")
+
+        # 1️⃣ 總體評分排行榜
+        avg_scores = score_data.groupby('機器代碼')['整體評分'].mean().reset_index()
+        fig = px.bar(avg_scores, x='機器代碼', y='整體評分', title='總體評分排行榜')
+        st.plotly_chart(fig)
+
+        # 2️⃣ NG 次數前10排行
+        top_ng = ng_summary.groupby('項目')['NG次數'].sum().nlargest(10).reset_index()
+        fig_ng = px.bar(top_ng, x='NG次數', y='項目', orientation='h', title='NG 次數 Top 10', text='NG次數')
+        st.plotly_chart(fig_ng)
+
+        # 3️⃣ 區塊總結 Note 字雲
+        all_notes = ' '.join(df[(df['項目'] == '區塊總結 Note') & (df['Note'] != '')]['Note'].tolist())
+        if all_notes.strip():
+            wordcloud = WordCloud(width=800, height=400, background_color='white', font_path=None).generate(all_notes)
+            fig_wc, ax = plt.subplots(figsize=(10, 5))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis('off')
+            st.pyplot(fig_wc)
+        else:
+            st.info('❕ 沒有可用的總結 Note 來生成字雲。')
 
         def create_analysis_excel(df_input):
             output = BytesIO()

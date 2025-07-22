@@ -1,8 +1,9 @@
 streamlit
 pandas
-plotly
-xlsxwriter
-openpyxl
 gspread
 google-auth
 gspread-dataframe
+xlsxwriter
+plotly
+wordcloud
+matplotlib
