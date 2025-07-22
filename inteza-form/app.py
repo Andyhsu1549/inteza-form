@@ -409,21 +409,29 @@ elif app_mode == '分析工具':
 
 
 
-    # 繪製 NG 次數（含機器代碼與備註，全數顯示，反轉順序，單色，不分段）
+    # NG 次數（含機器代碼與備註，全數顯示）
     ng_notes = ng_summary.merge(
         df[['機器代碼', '項目', 'Note']].drop_duplicates(),
         on=['機器代碼', '項目'],
         how='left'
     )
     
-    # 準備資料
-    ng_notes['型號_項目'] = ng_notes['機器代碼'] + '｜' + ng_notes['項目']
+    # 把順序改為 項目｜機器代碼
+    ng_notes['型號_項目'] = ng_notes['項目'] + '｜' + ng_notes['機器代碼']
+    
+    # 建立 hover 顯示用文字
     ng_notes['hovertext'] = ng_notes.apply(
-        lambda row: f"備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' else '',
+        lambda row: f"備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' else '無備註',
         axis=1
     )
     
-    top_ng = ng_notes.groupby(['型號_項目', 'hovertext'])['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
+    # 準備畫圖資料
+    top_ng = (
+        ng_notes.groupby(['型號_項目', 'hovertext'])['NG次數']
+        .sum()
+        .reset_index()
+        .sort_values('NG次數', ascending=False)
+    )
     
     # 畫圖
     fig_ng = px.bar(
@@ -431,28 +439,30 @@ elif app_mode == '分析工具':
         x='NG次數',
         y='型號_項目',
         orientation='h',
-        title='❌ 所有 NG 項目（含機器代碼，備註在 hover）',
+        title='❌ 所有 NG 項目（含項目｜機器代碼，hover 顯示備註）',
         text='NG次數',
-        color_discrete_sequence=['#d62728'],  # 統一紅色
+        color='NG次數',
+        color_continuous_scale='Reds',
         hover_name='hovertext'
     )
     
+    # 調整圖表細節
     fig_ng.update_traces(
         textposition='outside',
         textfont_size=14,
-        marker_line_width=0  # 不要分段線
+        marker_line_width=0.5
     )
     
     fig_ng.update_layout(
         height=600,
-        margin=dict(l=300, r=20, t=50, b=50),  # 左側留空間
+        margin=dict(l=350, r=20, t=50, b=50),  # 左側多留空間避免擠壓
         yaxis=dict(
             automargin=True,
-            tickfont=dict(family="Courier New, monospace", size=12),
-            categoryorder='total ascending'  # 反向排序，大的在上
+            tickfont=dict(family="Courier New, monospace", size=12)  # 用等寬字體讓對齊更好看
         )
     )
     
+    # 顯示在 Streamlit
     st.plotly_chart(fig_ng)
 
     # 下載分析報告 Excel
