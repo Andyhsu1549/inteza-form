@@ -407,33 +407,6 @@ elif app_mode == '分析工具':
     )
     st.plotly_chart(fig_ng)
 
-    # 字雲（總結 Note）
-    all_notes = ' '.join(df[(df['項目'] == '區塊總結 Note') & (df['Note'] != '')]['Note'].tolist())
-    if all_notes.strip():
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_notes)
-        fig_wc, ax = plt.subplots(figsize=(10, 5))
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis('off')
-        st.pyplot(fig_wc)
-    else:
-        st.info('❕ 沒有可用的總結 Note 來生成字雲。')
-
-    # 通過率熱圖
-    passrate_df = final_df[final_df['項目'] == '通過率 (%)'].set_index('區塊')[MACHINE_CODES_ALL]
-    passrate_df_clean = passrate_df.applymap(lambda x: float(x.replace('%', '')) if isinstance(x, str) and '%' in x else None)
-
-    fig, ax = plt.subplots(figsize=(12, 8))
-    sns.heatmap(
-        passrate_df_clean,
-        annot=True,
-        fmt=".1f",
-        cmap="YlGnBu",
-        cbar_kws={'label': '通過率 (%)'},
-        ax=ax
-    )
-    ax.set_title('🔥 通過率熱圖')
-    st.pyplot(fig)
-
     # 下載分析報告 Excel
     def create_analysis_excel(df_input):
         output = BytesIO()
