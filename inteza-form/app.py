@@ -409,28 +409,51 @@ elif app_mode == '分析工具':
 
 
 
-    # NG 次數（含機器代碼，全數顯示）
-    ng_summary['型號_項目'] = ng_summary['機器代碼'] + '｜' + ng_summary['項目']
-    top_ng = ng_summary.groupby('型號_項目')['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
+    # NG 次數（含機器代碼與備註，全數顯示）
+    ng_notes = ng_summary.merge(
+        df[['機器代碼', '項目', 'Note']].drop_duplicates(),
+        on=['機器代碼', '項目'],
+        how='left'
+    )
+    
+    ng_notes['型號_項目_備註'] = ng_notes.apply(
+        lambda row: f"{row['機器代碼']}｜{row['項目']}\n備註: {row['Note']}" if pd.notna(row['Note']) and row['Note'].strip() != '' 
+        else f"{row['機器代碼']}｜{row['項目']}",
+        axis=1
+    )
+    
+    top_ng = ng_notes.groupby('型號_項目_備註')['NG次數'].sum().reset_index().sort_values('NG次數', ascending=False)
+    
     fig_ng = px.bar(
         top_ng,
         x='NG次數',
-        y='型號_項目',
+        y='型號_項目_備註',
         orientation='h',
-        title='❌ 所有 NG 項目（含機器代碼，依次數排序）',
+        title='❌ 所有 NG 項目（含機器代碼與備註，依次數排序）',
         text='NG次數',
         color='NG次數',
         color_continuous_scale='Reds'
     )
     
-    # 強制顯示數值在條外
-    fig_ng.update_traces(textposition='outside')
+    fig_ng.update_traces(
+        textposition='outside',
+        textfont_size=14,
+        marker_line_width=0.5
+    )
     
-    # 如果項目很多，把圖高拉大
-    fig_ng.update_layout(height=600)
+    fig_ng.update_layout(
+        height=600,
+        yaxis=dict(
+            automargin=True,              # 自動邊距，避免長文字被裁切
+            tickfont=dict(size=12),       # y 軸字體大小
+            ticklabelposition='inside'    # 位置稍往內（靠左感更強）
+        ),
+        bargap=0.2,
+        margin=dict(l=200, r=20, t=50, b=50)  # 左邊拉寬（讓長文字有空間）
+    )
     
-    # 顯示在 Streamlit
     st.plotly_chart(fig_ng)
+
 
 
     # 下載分析報告 Excel
