@@ -409,7 +409,7 @@ elif app_mode == '分析工具':
 
 
 
-    # NG 次數（含機器代碼與備註，全數顯示）
+    # 繪製 NG 次數（含機器代碼與備註，全數顯示，反轉順序，單色，不分段）
     ng_notes = ng_summary.merge(
         df[['機器代碼', '項目', 'Note']].drop_duplicates(),
         on=['機器代碼', '項目'],
@@ -433,33 +433,27 @@ elif app_mode == '分析工具':
         orientation='h',
         title='❌ 所有 NG 項目（含機器代碼，備註在 hover）',
         text='NG次數',
-        color='NG次數',
-        color_continuous_scale='Reds',
+        color_discrete_sequence=['#d62728'],  # 統一紅色
         hover_name='hovertext'
     )
     
     fig_ng.update_traces(
         textposition='outside',
         textfont_size=14,
-        marker_line_width=0.5
+        marker_line_width=0  # 不要分段線
     )
     
     fig_ng.update_layout(
-    height=600,
-    margin=dict(l=300, r=20, t=50, b=50),  # 左側多留空間
-    yaxis=dict(
-        automargin=True,
-        tickfont=dict(family="Courier New, monospace", size=12),  # 用等寬字體
-        side='left'  # 確保在左側（預設值）
+        height=600,
+        margin=dict(l=300, r=20, t=50, b=50),  # 左側留空間
+        yaxis=dict(
+            automargin=True,
+            tickfont=dict(family="Courier New, monospace", size=12),
+            categoryorder='total ascending'  # 反向排序，大的在上
+        )
     )
-)
-
-
     
     st.plotly_chart(fig_ng)
-
-
-
 
     # 下載分析報告 Excel
     def create_analysis_excel(df_input):
