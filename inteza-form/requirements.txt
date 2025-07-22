@@ -3,7 +3,7 @@ pandas
 gspread
 google-auth
 gspread-dataframe
-xlsxwriter
 plotly
 wordcloud
 matplotlib
+openpyxl
